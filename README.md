@@ -12,4 +12,4 @@ Q = queen\
 K = king\
 A = ace
 
-Made with c++ in visual studio. 
+Made with C++ in visual studio.
