@@ -1,7 +1,7 @@
 # Blackjack
 A Blackjack game played in command prompt. The cards are shown as "H9" where the first letter is the suite and the later letters and numbers are the cards rank.
 
-H = hearts
+H = hearts.
 S = spades
 D = diamonds
 C = clubs
