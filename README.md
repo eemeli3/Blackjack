@@ -12,4 +12,4 @@ Q = queen\
 K = king\
 A = ace
 
-Made with C++ in visual studio.
+Made with C++ in visual studio. "blackjack_visual_studio.zip" has the visual studio files and "Blackjack_code.txt" has the code in a text file. 
