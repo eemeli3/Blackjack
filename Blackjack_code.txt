@@ -1,0 +1,553 @@
+// Blackjack.cpp
+// Eemeli Koivu 9.12.2024
+
+#include <iostream>
+#include <random>
+#include <vector>
+#include <chrono>
+#include <string>
+#include <thread>
+
+using namespace std;
+using namespace std::this_thread;
+using namespace std::chrono;
+
+int delay = 800; // Time in milliseconds. Used when program is paused.
+
+class card { // class for containing card information
+public:
+	string rank;
+	string suite;
+};
+
+
+
+int isInteger(string input) {// check if the input is an integer
+	for (const auto& ch : input) {
+		if (!isdigit(ch)) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int isFloat(string input) {// check if the input is a float
+	int numberOfPoints = 0;
+	for (const auto& ch : input) {
+		if (ch != '.') {
+			if (!isdigit(ch)) {
+				return 0;
+			}
+		}
+		else {
+			numberOfPoints++;
+		}
+	}
+	if (numberOfPoints > 1) {
+		return 0;
+	}
+	return 1;
+}
+
+int gameIntro() {// play intro message and ask if player wants to play the game
+	cout << "Blackjack.cpp\nEemeli Koivu 9.12.2024\nWelcome! Blackjack game that can be played with multiple players. Happy games!\n\n";
+	char ch;
+	string input;
+	while (1) { //ask whether player wants to play and check input is allowed
+		cout << "Play [y/n]: ";
+		cin >> input;
+		ch = input[0];
+		if (input.length() == 1) {
+			if (ch == 'y' || ch == 'n') {
+				cout << "\n";
+				break;
+			}
+		}
+		cin.clear();
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+		cout << "\nEnter \"y\" or \"n\".\n\n";
+	}
+	if (ch == 'n') { return 1; }
+	else { return 0; }
+}
+
+vector<float> getPlayerCredits() { // get credits for all players
+	int N;
+	string input;
+	while (1) { // ask the number of players and check input is allowed
+		cout << "Number of players: ";
+		cin >> input;
+		if (isInteger(input)) {
+			N = stoi(input);
+			if (N > 0) {
+				break;
+			}
+		}
+		cin.clear();
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+		cout << "\nEnter a positive integer.\n\n";
+	}
+	cout << "\n";
+	vector<float> credits;
+	for (int i = 0; i < N; i++) {// ask the players for credits and check input is allowed
+		string input;
+		float newCredit;
+		while (1) {
+			cout << "Player " << i + 1 << " credits: ";
+			cin >> input;
+			if (isFloat(input)) {
+				newCredit = stof(input);
+				if (newCredit > 0) {
+					break;
+				}
+			}
+			cin.clear();
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cout << "\nEnter a positive number.\n\n";
+		}
+		credits.push_back(newCredit);
+	}
+	cout << "\n";
+	return credits;
+}
+
+vector< vector<float> > getBets(int NumberOfPlayers, vector<float> credits) {// get bets
+	vector< vector<float> > bets;
+	for (int i = 0; i < NumberOfPlayers; i++) {
+		float bet;
+		string input;
+		while (1) {// ask the players for bets and check input is allowed
+			cout << "Player " << i + 1 << " bet: ";
+			cin >> input;
+			if (isFloat(input)) {
+				bet = stof(input);
+				if (bet > 0 && bet <= credits[i]) {
+					break;
+				}
+			}
+			cin.clear();
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cout << "\nEnter a positive number that is less than or equal to credits.\n\n";
+		}
+		vector<float> playerBets = { bet };
+		bets.push_back(playerBets);
+	}
+	cout << "\n";
+	return bets;
+}
+
+vector<card> createDeck() {//create shuffled deck
+	vector<card> cards;
+	for (int j = 1; j < 5; j++) {// create ordered deck
+		for (int i = 1; i < 14; i++) {
+			card newCard;
+			switch (j) {//assign suite to card
+			case 1:
+				newCard.suite = 'H';
+				break;
+			case 2:
+				newCard.suite = 'D';
+				break;
+			case 3:
+				newCard.suite = 'C';
+				break;
+			case 4:
+				newCard.suite = 'S';
+				break;
+			}
+			switch (i) {// assign rank to card
+			case (1):
+				newCard.rank = 'A';
+				break;
+			case (11):
+				newCard.rank = 'J';
+				break;
+			case (12):
+				newCard.rank = 'Q';
+				break;
+			case (13):
+				newCard.rank = 'K';
+				break;
+			default:
+				newCard.rank = to_string(i);
+			}
+			cards.push_back(newCard);
+		}
+	}
+	unsigned seed = system_clock::now().time_since_epoch().count();
+	shuffle(cards.begin(), cards.end(), default_random_engine(seed)); // shuffle deck
+	return cards;
+}
+
+vector<card> getDealerCards(vector<card>* deck) {// deal dealer cards from the deck
+	vector<card> dealerCards(2);
+	dealerCards[0] = (*deck)[0];
+	dealerCards[1] = (*deck)[1];
+	(*deck).erase((*deck).begin(), (*deck).begin() + 2);
+	return dealerCards;
+}
+
+vector< vector< vector<card> > > getPlayerCards(vector<card>* deck, int NumberOfPlayers) {// deal player cards from the deck
+	vector< vector< vector<card> > > players;
+	for (int i = 0; i < NumberOfPlayers; i++) {// deal initial hands
+		vector<card> newCards(2);
+		vector< vector<card> > playerHands;
+		newCards[0] = (*deck)[0];
+		newCards[1] = (*deck)[1];
+		(*deck).erase((*deck).begin(), (*deck).begin() + 2);
+		playerHands.push_back(newCards);
+		players.push_back(playerHands);
+	}
+	return players;
+}
+
+vector<int> calculateScore(vector<card> cards) {// calculate possible scores for a hand
+	int score = 0;
+	int aces = 0;
+	for (int i = 0; i < cards.size(); i++) {// Calculate score from all cards beside aces. Count number of aces.
+		string cardRank = cards[i].rank;
+		if (cardRank == "J" || cardRank == "Q" || cardRank == "K") {
+			score = score + 10;
+		}
+		else if (cardRank == "A") {
+			aces++;
+		}
+		else {
+			score = score + stoi(cardRank);
+		}
+	}
+	vector<int> possibleScores(aces + 1);
+	for (int i = 0; i < aces + 1; i++) {// calculate what scores may come from aces
+		possibleScores[i] = score + i * 1 + (aces - i) * 11;
+	}
+	return possibleScores;
+}
+
+int isBlackjack(vector< vector<card> >* playerHands) {// check whether the initial hand is a blackjack
+	vector<int> possibleScores = calculateScore((*playerHands)[0]);
+	for (int i = 0; i < possibleScores.size(); i++) {
+		if (possibleScores[i] == 21 && (*playerHands).size() == 1 && (*playerHands)[0].size() == 2) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int canSplit(vector<card> hand) {//Check whether the hand can be split.
+	for (int j = 0; j < hand.size() - 1; j++) {
+		int score1 = (calculateScore({ hand[j] }))[0];
+		int score2 = (calculateScore({ *(--hand.end()) }))[0];
+		if (score1 == score2) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+void showPlayerHand(vector< vector<card> > hands, int playerNumber, int handNumber) {// print cards in player's hand
+	cout << "Player " << playerNumber << " ";
+	if (hands.size() > 1) {
+		cout << "hand " << handNumber << " ";
+	}
+	cout << "cards are: ";
+	for (int j = 0; j < hands[handNumber - 1].size(); j++) {
+		cout << hands[handNumber - 1][j].suite << hands[handNumber - 1][j].rank << " ";
+	}
+	cout << "\n";
+}
+
+int canDoubleBet(vector<float>* bets, vector<float> credits, int playerNumber, int handNumber) {// checks whether player has enough credits to double bet
+	if (credits[playerNumber - 1] > 2 * (*bets)[handNumber]) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+void doPlayerTurn(vector<card>* deck, vector< vector<card> >* playerHands, vector<float>* bets, vector<float> credits, string dealerCardMsg, int playerNumber) {// play a player's turn
+	if (isBlackjack(playerHands)) { //check whether player has blackjack and end turn if they do
+		cout << "Player " << playerNumber << " turn.\n";
+		cout << "Player " << playerNumber << " bet is " << (*bets)[0] << ".\n";
+		cout << dealerCardMsg;
+		showPlayerHand(*playerHands, playerNumber, 1);
+		cout << "Player " << playerNumber << " has a blackjack. There are no allowed actions.\n\n";
+		sleep_for(milliseconds(delay));
+		return;
+	}
+	vector<int> possibleScores;
+	int minScore;
+	for (int i = 0; i < (*playerHands).size(); i++) {// loop over the player's hands
+		while (1) {// iterate until the player ends their turn or score goes over 21
+			cout << "Player " << playerNumber << " turn.\n";
+			cout << "Player " << playerNumber << " ";
+			if ((*playerHands).size() > 1) {
+				cout << "hand " << i + 1 << " ";
+			}
+			cout << "bet is " << (*bets)[i] << ".\n";
+			cout << dealerCardMsg;
+			showPlayerHand(*playerHands, playerNumber, i + 1);
+			possibleScores = calculateScore((*playerHands)[i]);
+			minScore = *min_element(possibleScores.begin(), possibleScores.end());// get smallest score the player's hand could be
+			if (minScore > 21) {//the score is over 21. End turn.
+				cout << "The score is greater than 21. There are no allowed actions.\n\n";
+				sleep_for(milliseconds(delay));
+				break;
+			}
+			vector<int> allowed_actions = { 1, 2, 3 };
+			cout << "Possible actions are:\n1. Hit\n2. Stand\n3. Surrender\n";
+			if (canDoubleBet(bets, credits, playerNumber, i)) {// add double to allowed actions if the player has enough credits
+				cout << "4. Double\n";
+				allowed_actions.push_back(4);
+			}
+			if (canSplit((*playerHands)[i]) && canDoubleBet(bets, credits, playerNumber, i)) {// add split to allowed actions if the player has a pair and enough credits
+				cout << "5. Split\n";
+				allowed_actions.push_back(5);
+			}
+			string input;
+			int action;
+			while (1) {// ask player's action
+				cout << "Action: ";
+				cin >> input;
+				if (isInteger(input)) {
+					action = stoi(input);
+					if (count(allowed_actions.begin(), allowed_actions.end(), action)) {
+						break;
+					}
+				}
+				cout << "Enter a possible action (";
+				for (int j = 0; j < allowed_actions.size() - 1; j++) {
+					cout << allowed_actions[j] << ", ";
+				}
+				cout << "or " << *(--allowed_actions.end()) << ").\n\n";
+				cin.clear();
+				cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			}
+			if (action == 1) {// player chooses hit
+				(*playerHands)[i].push_back((*deck)[0]);
+				(*deck).erase((*deck).begin());
+				cout << "\n";
+			}
+			else if (action == 2) {// player chooses stand
+				cout << "\n";
+				break;
+			}
+			else if (action == 3) {// player chooses surrender
+				(*playerHands)[i].clear();
+				(*bets)[i] = 0.5 * (*bets)[i];
+				cout << "\n";
+				break;
+			}
+			else if (action == 4) {// player choooses double
+				(*playerHands)[i].push_back((*deck)[0]);
+				(*deck).erase((*deck).begin());
+				(*bets)[i] = 2 * (*bets)[i];
+				cout << "\n";
+				showPlayerHand(*playerHands, playerNumber, i + 1);
+				cout << "Player " << playerNumber << " ";
+				if ((*playerHands).size() > 1) {
+					cout << "hand " << i + 1 << " ";
+				}
+				cout << "bet is " << (*bets)[i] << ".\n";
+				cout << "\n";
+				sleep_for(milliseconds(delay));
+				break;
+			}
+			else if (action == 5) {// player chooses split
+				vector<card> newHand = { *(--(*playerHands)[i].end()) };
+				(*playerHands).push_back(newHand);
+				(*bets).push_back((*bets)[i]);
+				(*playerHands)[i].pop_back();
+				cout << "\n";
+			}
+		}
+	}
+	cout << "\n";
+}
+
+void doDealerTurn(vector<card>* dealerCards, vector<card>* deck) {// play dealer's turn
+	while (1) {
+		cout << "Dealer turn.\n";
+		cout << "Dealer cards are: ";
+		for (int j = 0; j < (*dealerCards).size(); j++) {
+			cout << (*dealerCards)[j].suite << (*dealerCards)[j].rank << " ";
+		}
+		cout << "\n\n";
+		sleep_for(milliseconds(delay));
+		vector<int> possibleScores = calculateScore(*dealerCards);
+		for (int i = 0; i < possibleScores.size(); i++) {// break loop if dealer's score is 17 or higher
+			if (possibleScores[i] > 16) {
+				cout << "\n\n";
+				return;
+			}
+		}
+		(*dealerCards).push_back((*deck)[0]);
+		(*deck).erase((*deck).begin());
+	}
+}
+
+vector<float> calculateGains(vector< vector< vector<card> > > players, vector<card> dealerCards, vector< vector<float> > bets) {// calculate how much player's gain/lose
+	vector<float> gains;
+	vector<int> possibleDealerScores = calculateScore(dealerCards);
+	int dealerScore = 0;
+	for (int i = 0; i < possibleDealerScores.size(); i++) {// calculate dealer's score
+		if (possibleDealerScores[i] > dealerScore && possibleDealerScores[i] < 22) {
+			dealerScore = possibleDealerScores[i];
+		}
+	}
+	cout << "Dealer score is ";
+	if (dealerScore == 0) {// dealer's score is over 21
+		cout << *min_element(possibleDealerScores.begin(), possibleDealerScores.end()) << ".\n\n";
+	}
+	else {
+		cout << dealerScore << ".\n\n";
+	}
+	for (int i = 0; i < players.size(); i++) {// loop over players
+		gains.push_back(0);
+		for (int j = 0; j < players[i].size(); j++) {// loop over a player's hands
+			vector<card> playerHand = players[i][j];
+			if (playerHand.size() == 0) {// handles players who surrendered
+				gains[i] = gains[i] - bets[i][j];
+				cout << "Player " << i + 1 << " ";
+				if (players[i].size() > 1) {
+					cout << "hand " << j + 1 << " ";
+				}
+				cout << "surrendered.\n";
+				cout << "Player " << i + 1 << " lost " << bets[i][j] << " credits.\n\n";
+				sleep_for(milliseconds(delay));
+			}
+			else if (isBlackjack(&(players[i]))) {//player has blackjack
+				if (dealerScore == 21 && dealerCards.size() == 2) {// dealer has blackjack
+					cout << "Player " << i + 1 << " has a blackjack and dealer has a blackjack.\nDraw.\n\n";
+					sleep_for(milliseconds(delay));
+				}
+				else {//dealer does not have blackjack
+					gains[i] = gains[i] + bets[i][j];
+					cout << "Player " << i + 1 << " has a blackjack and dealer does not.\n";
+					cout << "Player " << i + 1 << " won " << bets[i][j] << " credits.\n\n";
+					sleep_for(milliseconds(delay));
+				}
+			}
+			else if (dealerScore == 21 && dealerCards.size() == 2) {// dealer has blackjack and player does not
+				gains[i] = gains[i] - bets[i][j];
+				cout << "Dealer's hand is a blackjack. Player " << i + 1;
+				if (players[i].size() > 1) {
+					cout << " hand " << j + 1 << " ";
+				}
+				else { cout << "'s hand "; }
+				cout << "is not.\nPlayer " << i + 1 << " lost " << bets[i][j] << " credits.\n\n";
+				sleep_for(milliseconds(delay));
+			}
+			else {// neither the player or dealer has blackjack
+				vector<int> possiblePlayerScores = calculateScore(playerHand);
+				int playerScore = 0;
+				for (int k = 0; k < possiblePlayerScores.size(); k++) {// calculate player's score
+					if (possiblePlayerScores[k] > playerScore && possiblePlayerScores[k] < 22) {
+						playerScore = possiblePlayerScores[k];
+					}
+				}
+				cout << "player " << i + 1 << " ";
+				if (players[i].size() > 1) {
+					cout << "hand " << j + 1 << " ";
+				}
+				cout << "score is ";
+				if (playerScore == 0) {// player's score is over 21
+					cout << *min_element(possiblePlayerScores.begin(), possiblePlayerScores.end()) << ".\n";
+				}
+				else {
+					cout << playerScore << ".\n";
+				}
+				if (playerScore > dealerScore) {// handles player winning
+					gains[i] = gains[i] + bets[i][j];
+					cout << "Player " << i + 1 << " won " << bets[i][j] << " credits.\n\n";
+					sleep_for(milliseconds(delay));
+				}
+				else if (playerScore < dealerScore) {// handles player loosing
+					gains[i] = gains[i] - bets[i][j];
+					cout << "Player " << i + 1 << " lost " << bets[i][j] << " credits.\n\n";
+					sleep_for(milliseconds(delay));
+				}
+				else {// handles player getting a draw
+					cout << "Draw.\n\n";
+					sleep_for(milliseconds(delay));
+				}
+			}
+		}
+	}
+	cout << "\n\n";
+	return gains;
+}
+
+vector<float> playRound(vector<float> credits) {// Do one round of blackjack. Returns gains/losses.
+	int NumberOfPlayers = credits.size();
+	vector< vector<float> > bets = getBets(NumberOfPlayers, credits);
+	vector<card> deck = createDeck();
+	vector<card> dealerCards = getDealerCards(&deck);
+	vector< vector< vector<card> > > players = getPlayerCards(&deck, NumberOfPlayers);
+	string dealerCardMsg = "Dealer cards are: " + dealerCards[0].suite + dealerCards[0].rank + " ?\n";
+	cout << "\n\n" << dealerCardMsg << "\n\n\n";
+	sleep_for(milliseconds(delay));
+	for (int i = 0; i < NumberOfPlayers; i++) {
+		doPlayerTurn(&deck, &(players[i]), &(bets[i]), credits, dealerCardMsg, i + 1);
+	}
+	cout << "\n";
+	doDealerTurn(&dealerCards, &deck);
+	vector<float> gains = calculateGains(players, dealerCards, bets);
+	return gains;
+}
+
+int main()
+{
+	if (gameIntro()) {// print intro and ask if players want to play
+		cout << "Thank you for playing.\n";
+		return 0;
+	}
+	vector<float> credits = getPlayerCredits();// get credits for players
+	while (1) {// game loop
+		vector<float> gains = playRound(credits);// Play one round of blackjack. Returns gains/losses.
+		for (int i = 0; i < credits.size(); i++) {// update credits
+			credits[i] = credits[i] + gains[i];
+			cout << "Player " << i + 1 << " has " << credits[i] << " credits.\n";
+		}
+		cout << "\n";
+		for (int i = 0; i < credits.size(); i++) {// Check if a player has run out of money. End game if someone has.
+			if (credits[i] <= 0) {
+				cout << "Player " << i + 1 << " has run out of credits.\n";
+				return 0;
+			}
+		}
+		string input;
+		char ch;
+		while (1) { // ask if player's want to play another round and check if input is allowed
+			cout << "Continue [y/n]: ";
+			cin >> input;
+			ch = input[0];
+			if (input.length() == 1) {
+				if (ch == 'y' || ch == 'n') {
+					break;
+				}
+			}
+			cin.clear();
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			cout << "\nEnter \"y\" or \"n\".\n\n";
+		}
+		if (ch == 'n') {
+			cout << "\n";
+			break;
+		}
+		cout << "\n\n\nNext round.\n";
+	}
+	cout << "Thank you for playing.\n";
+	return 0;
+}
+
+// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
+// Debug program: F5 or Debug > Start Debugging menu
+
+// Tips for Getting Started: 
+//   1. Use the Solution Explorer window to add/manage files
+//   2. Use the Team Explorer window to connect to source control
+//   3. Use the Output window to see build output and other messages
+//   4. Use the Error List window to view errors
+//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
+//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
