@@ -12,4 +12,6 @@ Q = queen\
 K = king\
 A = ace
 
-Made with C++ in visual studio. "blackjack.exe" is the application. "Blackjack_code.txt" has the code in a text file. 
+Made with C++ in visual studio. Requires standard C++ libraries.
+
+"blackjack.exe" is the application. "Blackjack_code.txt" has the code in a text file. 
